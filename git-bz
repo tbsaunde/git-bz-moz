@@ -1632,8 +1632,16 @@ def attach_commits(bug, commits, include_comments=True, edit_comments=False, sta
             obsoletes = []
             review = []
             superreview = []
+        # Prepend the commit message
         if commit_message:
             patch = commit_message + "\n\n" + patch
+        # Prepend the author information in HG patch format.
+        try:
+          hgstring = '# HG changeset patch\n'
+          hgstring += "# User " + git.config('user.name', get=True)
+          hgstring += ' <' + git.config('user.email', get=True) + '>\n\n'
+          patch = hgstring + patch
+        except CalledProcessError: pass
         bug.create_patch(description, body, filename,  patch, obsoletes=obsoletes, status=status, review=review, superreview=superreview)
 
 def do_attach(*args):
