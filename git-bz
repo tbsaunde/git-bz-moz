@@ -80,6 +80,7 @@ import tempfile
 import time
 import traceback
 import xmlrpclib
+import urllib
 import urlparse
 from xml.etree.cElementTree import ElementTree
 import base64
@@ -588,6 +589,13 @@ def get_bugzilla_cookies_ff3(host):
 
     return get_cookies_from_sqlite_xulrunner(host, cookies_sqlite, "Firefox")
 
+def get_bugzilla_cookies_galeon(host):
+    cookies_sqlite = os.path.expanduser('~/.galeon/mozilla/galeon/cookies.sqlite')
+    if not os.path.exists(cookies_sqlite):
+        raise CookieError("%s doesn't exist." % cookies_sqlite)
+
+    return get_cookies_from_sqlite_xulrunner(host, cookies_sqlite, "Galeon")
+
 def get_bugzilla_cookies_epy(host):
     # epiphany-webkit migrated the cookie db to a different location, but the
     # format is the same
@@ -624,6 +632,7 @@ def get_bugzilla_cookies_google_chrome(host):
 
 browsers = { 'firefox3'     : get_bugzilla_cookies_ff3,
              'epiphany'     : get_bugzilla_cookies_epy,
+             'galeon'       : get_bugzilla_cookies_galeon,
              'chromium'     : get_bugzilla_cookies_chromium,
              'google-chrome': get_bugzilla_cookies_google_chrome }
 
@@ -734,19 +743,7 @@ def make_filename(description):
     return filename
 
 def edit_file(filename):
-    editor = None
-    if 'GIT_EDITOR' in os.environ:
-        editor = os.environ['GIT_EDITOR']
-    if editor == None:
-        try:
-            editor = git.config('core.editor', get=True)
-        except CalledProcessError:
-            pass
-    if editor == None and 'EDITOR' in os.environ:
-        editor = os.environ['EDITOR']
-    if editor == None:
-        editor = "vi"
-
+    editor = git.var("GIT_EDITOR")
     process = Popen(editor + " " + filename, shell=True)
     process.wait()
     if process.returncode != 0:
@@ -765,7 +762,7 @@ def edit_template(template):
 
     f = open(filename, "r")
     lines = filter(lambda x: not x.startswith("#"), f.readlines())
-    f.close
+    f.close()
 
     return lines
 
@@ -871,7 +868,10 @@ class BugServer(object):
 
     def send_request(self, method, url, data=None, headers={}):
         headers = dict(headers)
-        headers['Cookie'] = self.get_cookie_string()
+        cookies = self.get_cookie_string()
+        if isinstance(cookies, unicode):
+            cookies = cookies.encode('UTF-8')
+        headers['Cookie'] = cookies
         headers['User-Agent'] = "git-bz"
         if self.auth_user and self.auth_password:
             headers['Authorization'] = http_auth_header(self.auth_user, self.auth_password)
@@ -974,6 +974,46 @@ class BugServer(object):
 
         return self._xmlrpc_proxy
 
+    def _product_id(self, product_name):
+        # This way works with newer bugzilla; older Bugzilla doesn't support names:
+        try:
+            response = self.get_xmlrpc_proxy().Product.get({ 'names': product_name, 'include_fields': ['id', 'name'] })
+            products = response['products']
+            if len(products) > 0:
+                return products[0]['id']
+        except xmlrpclib.Fault, e:
+            pass
+        except xmlrpclib.ProtocolError, e:
+            pass
+
+        # This should work with any bugzilla that supports xmlrpc, but will be slow
+        print >>sys.stderr, "Searching for product ID ...",
+        try:
+            response = self.get_xmlrpc_proxy().Product.get_accessible_products({})
+            ids = response['ids']
+            response = self.get_xmlrpc_proxy().Product.get_products({ 'ids': ids, 'include_fields': ['id', 'name']})
+            for p in response['products']:
+                if p['name'] == product_name:
+                    print >>sys.stderr, "found it"
+                    return p['id']
+        except xmlrpclib.Fault, e:
+            pass
+        except xmlrpclib.ProtocolError, e:
+            pass
+
+        print >>sys.stderr, "failed"
+        return None
+
+    def product_id(self, product_name):
+        key = 'product_id_' + urllib.quote(product_name)
+        try:
+            return cache.get(self.host, key)
+        except IndexError:
+            value = self._product_id(product_name)
+            if value != None:
+                cache.set(self.host, key, value)
+            return value
+
     # Query the server for the legal values of the given field; returns an
     # array, or None if the query failed
     def _legal_values(self, field):
@@ -1004,7 +1044,10 @@ class BugServer(object):
 class CookieTransportMixin(object):
     def send_request(self, connection, *args):
         xmlrpclib.Transport.send_request(self, connection, *args)
-        connection.putheader("Cookie", self.server.get_cookie_string())
+        cookie = self.server.get_cookie_string()
+        if isinstance(cookie, unicode):
+            cookie = cookie.encode('UTF-8')
+        connection.putheader("Cookie", cookie)
         connection.putheader("Authorization", http_auth_header(self.server.auth_user, self.server.auth_password))
 
 class BugTransport(CookieTransportMixin, xmlrpclib.Transport):
@@ -1227,7 +1270,7 @@ class Bug(object):
                 fields['flag_type-5'] = '?'
                 fields['requestee_type-5'] = ",".join(superreview)
 
-        files = { 'data': (filename, 'text/plain', data) }
+        files = { 'data': (filename, 'text/plain; charset=UTF-8', data) }
 
         response = self.server.send_post("/attachment.cgi", fields, files)
         response_data = response.read()
@@ -2042,6 +2085,17 @@ def do_file(*args):
 
     commits = get_commits(commit_or_revision_range)
 
+    bug_references = [c for c in extract_and_collate_bugs(commits)]
+    if len(bug_references) > 0:
+        print ("Found existing bug reference%s in commit message%s:" %
+               ("" if len(bug_references) == 1 else "s",
+                "" if len(commits) == 1 else "s"))
+        for reference, _ in bug_references:
+            print " ", reference.get_url()
+        if not prompt("File anyway?"):
+            print "Aborting"
+            sys.exit(0)
+
     if global_options.add_url:
         check_add_url(commits, is_add_url=False)
 
@@ -2148,6 +2202,37 @@ def do_push(*args):
             bug = Bug.load(handle)
             edit_bug(bug, commits)
 
+def do_components(*args):
+    tracker = get_tracker()
+    host = resolve_host_alias(tracker)
+    https = tracker_uses_https(tracker)
+    path = tracker_get_path(tracker)
+    auth_user = tracker_get_auth_user(tracker)
+    auth_password = tracker_get_auth_password(tracker)
+
+    server = get_bug_server(host, path, https, auth_user, auth_password)
+
+    if len(args) == 1:
+        product = args[0]
+    else:
+        product = get_default_product()
+        if not product:
+            die("<product> not specified and no default product is configured" + PRODUCT_COMPONENT_HELP)
+
+    product_id = server.product_id(product)
+    if product_id is None:
+        die("No such product " + product)
+
+    try:
+        response = server.get_xmlrpc_proxy().Bug.legal_values({'product_id': product_id, 'field': 'component'})
+        components = response['values']
+        for component in components:
+            print component
+    except xmlrpclib.Fault, e:
+        die(e.faultString)
+    except xmlrpclib.ProtocolError, e:
+        die("Unable to retrieve components: %s" % e.errmsg)
+
 ################################################################################
 
 if len(sys.argv) > 1:
@@ -2188,6 +2273,10 @@ elif command == 'attach':
     add_edit_option()
     min_args = 1
     max_args = 2
+elif command == 'components':
+    parser.set_usage("git bz components [options] [<product>]");
+    min_args = 0
+    max_args = 1
 elif command == 'edit':
     parser.set_usage("git bz edit [options] (<bug reference> | <commit> | <revision range>)");
     parser.add_option("", "--pushed", action="store_true",
@@ -2209,7 +2298,7 @@ elif command == 'push':
     min_args = 0
     max_args = 1000 # no max
 else:
-    print >>sys.stderr, "Usage: git bz [add-url|apply|attach|edit|file|push] [options]"
+    print >>sys.stderr, "Usage: git bz [add-url|apply|attach|components|edit|file|push] [options]"
     sys.exit(1)
 
 global_options, args = parser.parse_args()
@@ -2227,6 +2316,8 @@ elif command == 'apply':
     do_apply(*args)
 elif command == 'attach':
     do_attach(*args)
+elif command == 'components':
+    do_components(*args)
 elif command == 'edit':
     if global_options.pushed:
         exit
