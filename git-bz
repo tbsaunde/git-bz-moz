@@ -1636,34 +1636,25 @@ def edit_attachment_comment(bug, initial_description, initial_body):
     commit_message = []
 
     def filter_special(line):
-        m = re.match("^\s*Obsoletes\s*:\s*([\d]+)", line)
-
-        r = re.match("^\s*Review\s*:\s*([\S]+@[\S]+\.[\w]+)\s*$", line)
-        # Support :names
-        if not r:
-            r = re.match("^\s*Review\s*:\s*(:[\w]+\+?)\s*$", line)
-
-        sr = re.match("^\s*Super-Review\s*:\s*([\S]+@[\S]+\.[\w]+)\s*$", line)
-        # Support names
-        if not sr:
-            sr = re.match("^\s*Super-Review\s*:\s*(:[\w]+\+?)\s*$", line)
-
-        # Parse commit messages
-        c = re.match("^\s*Commit-Message\s*:\s*(.*)\s*$", line)
-
-        if m:
-            obsoletes.append(int(m.group(1)))
+        def append_matching_group(regexp, list, line):
+            match = re.match(regexp, line)
+            if match:
+                list.append(match.group(1).strip())
+                return True
             return False
-        elif r:
-            review.append(r.group(1))
-        elif sr:
-            superreview.append(sr.group(1))
-        elif c:
-            commit_message.append(c.group(1))
-        else:
-            return True
+
+        # Capture the 'obsoletes', 'review', 'super-review', or
+        # 'commit-message' info in this line and shove it into the relevant
+        # list.
+        if append_matching_group("^\s*Obsoletes\s*:\s*([\d]+)", obsoletes, line) or \
+           append_matching_group("^\s*Review\s*:\s*(.+)", review, line) or \
+           append_matching_group("^\s*Super-Review\s*:\s*(.+)", superreview, line) or \
+           append_matching_group("^\s*Commit-Message\s*:\s*(.*)", commit_message, line):
+             return False
+        return True
 
     lines = filter(filter_special, lines)
+    obsoletes = map(int, obsoletes)
 
     description, comment = split_subject_body(lines)
 
