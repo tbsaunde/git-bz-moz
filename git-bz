@@ -512,11 +512,16 @@ def do_get_cookies_from_sqlite(host, cookies_sqlite, browser, query, chromium_ti
 
         return result
     # Let the user know what might be going wrong in the case of a cryptic database error.
-    except sqlite.DatabaseError:
-        print ("Python threw a database error. A likely cause is that your version of python "
-               "doesn't have a recent enough sqlite module to support this cookie database. "
-               "Try upgrading your python sqlite module.")
-        raise
+    except sqlite.DatabaseError, e:
+        if "file is encrypted or is not a database" in str(e) and get_sqlite3():
+            # Try using the sqlite3 command line tool on OS X (since the MacPorts pysqlite is too old)
+            return get_cookies_from_sqlite_with_sqlite3(host, cookies_sqlite, browser, query,
+                                                        chromium_time=chromium_time)
+        else:
+            print ("Python threw a database error. A likely cause is that your version of python "
+                   "doesn't have a recent enough sqlite module to support this cookie database. "
+                   "Try upgrading your python sqlite module.")
+            raise
     finally:
         connection.close()
 
@@ -532,6 +537,29 @@ def get_cookies_from_sqlite_with_copy(host, cookies_sqlite, browser, *args, **kw
         raise CookieError("Cookie database was locked; temporary copy didn't work")
     finally:
         os.remove(db_copy)
+
+def get_sqlite3():
+    for dirname in os.environ['PATH'].split(":"):
+        path = os.path.join(dirname, 'sqlite3')
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+          return path
+    return False
+
+def get_cookies_from_sqlite_with_sqlite3(host, cookies_sqlite, browser, query, chromium_time):
+    sqlite3 = get_sqlite3()
+    query = query.replace(':host', '"' + host + '"') + ';'
+    process = Popen([sqlite3, cookies_sqlite], stdout=PIPE, stderr=PIPE, stdin=PIPE)
+    output, error = process.communicate(query)
+    if process.returncode != 0:
+        raise CalledProcessError(process.returncode, sqlite3)
+    cookies = {}
+    for line in output.split("\n"):
+        fields = line.split("|")
+        if (fields[0] == 'Bugzilla_login'):
+            cookies['Bugzilla_login'] = fields[1]
+        elif (fields[0] == 'Bugzilla_logincookie'):
+            cookies['Bugzilla_logincookie'] = fields[1]
+    return cookies
 
 def get_cookies_from_sqlite(host, cookies_sqlite, browser, query, chromium_time=False):
     try:
