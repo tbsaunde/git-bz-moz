@@ -1612,11 +1612,20 @@ def edit_attachment_comment(bug, initial_description, initial_body):
     template.write(initial_body)
     template.write("\n\n")
     template.write("Commit-Message: %s\n\n" % initial_description)
-    template.write("#Review: reviewer1@example.com\n")
-    template.write("#Review: reviewer2@example.com\n")
-    template.write("#Review: :me+\n")
-    template.write("#Super-Review: superreviewer@example.com\n\n")
-    template.write("#Super-Review: :me+\n")
+    try:
+        for reviewer in git.config('bz.reviewer', get_all=True).split('\n'):
+            template.write("#Review: %s\n" % reviewer)
+    except CalledProcessError:
+        template.write("#Review: reviewer1@example.com\n")
+        template.write("#Review: reviewer2@example.com\n")
+    template.write("#Review: :me+\n\n")
+
+    try:
+        for reviewer in git.config('bz.superreviewer', get_all=True).split('\n'):
+            template.write("#Super-Review: %s\n" % reviewer)
+    except CalledProcessError:
+        template.write("#Super-Review: superreviewer@example.com\n")
+    template.write("#Super-Review: :me+\n\n")
     if len(bug.patches) > 0:
         for patch in bug.patches:
             template.write("#Obsoletes: %d - %s\n" % (patch.attach_id, patch.description))
