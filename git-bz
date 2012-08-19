@@ -167,6 +167,32 @@ class GitCommit:
         self.subject = subject
         self.author = author
 
+    def should_fold(self):
+        return self.subject.startswith("FOLD")
+
+    def commit_range(self):
+        return "%s^..%s" % (self.id, self.id)
+
+class GitCommitRange:
+    """A GitCommitRange is just like a GitCommit, except it has a start and an
+    end id.  This class is used when folding patches.  The folded patches take
+    the initial commit's subject and author, but their combined diff is over
+    the range start^..end.
+    
+    """
+    def __init__(self, commit):
+        self.start = commit.id
+        self.end = commit.id
+        self.subject = commit.subject
+        self.author = commit.author
+
+    def fold(self, commit):
+        # We assume that the last patch you fold in is the end of the range.
+        self.end = commit.id
+
+    def commit_range(self):
+        return "%s^..%s" % (self.start, self.end)
+
 def rev_list_commits(*args, **kwargs):
     kwargs_copy = dict(kwargs)
     kwargs_copy['pretty'] = 'format:%an <%ae>%n%s'
@@ -207,14 +233,16 @@ def get_commits(commit_or_revision_range):
 
     return commits
 
-def get_patch(commit):
+def get_patch(commit_or_range):
     # We could pass through -M as an option, but I think you basically always
     # want it; showing renames as renames rather than removes/adds greatly
     # improves readability.
-    return git.diff(commit.id + "^.." + commit.id, M=True, binary=True, unified="8", patience=True) + "\n"
 
-def get_body(commit):
-    return git.log(commit.id + "^.." + commit.id, pretty="format:%b")
+    return git.diff(commit_or_range.commit_range(),
+                    M=True, binary=True, unified="8", patience=True) + "\n"
+
+def get_body(commit_or_range):
+    return git.log(commit_or_range.commit_range(), pretty="format:%b")
 
 def commit_is_merge(commit):
     contents = git.cat_file("commit", commit.id)
@@ -1709,18 +1737,28 @@ def attach_commits(bug, commits, include_comments=True, edit_comments=False, sta
     commits = list(commits)
     commits.reverse()
 
+    if commits and commits[0].should_fold():
+        die("Can't fold first commit into non-existant commit above it.")
+
+    commit_ranges = []
     for commit in commits:
-        filename = make_filename(commit.subject) + ".patch"
-        patch = get_patch(commit)
+        if not commit.should_fold():
+            commit_ranges.append(GitCommitRange(commit))
+        else:
+            commit_ranges[-1].fold(commit)
+
+    for commit_range in commit_ranges:
+        filename = make_filename(commit_range.subject) + ".patch"
+        patch = get_patch(commit_range)
         if include_comments:
-            body = strip_bug_url(bug, get_body(commit))
+            body = strip_bug_url(bug, get_body(commit_range))
         else:
             body = None
         if edit_comments:
-            description, body, obsoletes, commit_message, review, superreview = edit_attachment_comment(bug, commit.subject, body)
+            description, body, obsoletes, commit_message, review, superreview = edit_attachment_comment(bug, commit_range.subject, body)
         else:
-            description = commit.subject
-            commit_message = commit.subject
+            description = commit_range.subject
+            commit_message = commit_range.subject
             obsoletes = []
             review = []
             superreview = []
@@ -1729,7 +1767,7 @@ def attach_commits(bug, commits, include_comments=True, edit_comments=False, sta
             patch = commit_message + "\n\n" + patch
         # Prepend the author information in HG patch format.
         hgstring = '# HG changeset patch\n'
-        hgstring += "# User " + commit.author + '\n\n'
+        hgstring += "# User " + commit_range.author + '\n\n'
         patch = hgstring + patch
 
         bug.create_patch(description, body, filename,  patch, obsoletes=obsoletes, status=status, review=review, superreview=superreview)
