@@ -1652,6 +1652,11 @@ def do_apply(bug_reference):
             commits = rev_list_commits("HEAD^!")
             add_url(bug, commits)
 
+def strip_bug_prefix(bug, description):
+    # Strip any Bug XXXXXX prefix in a short description
+    pattern = r"^\s*[Bb](ug)?\s*=?\s*%s\s*[\-:]?\s*" % (bug.id)
+    return re.sub(pattern, "", description)
+
 def strip_bug_url(bug, commit_body):
     # Strip off the trailing bug URLs we add with -u; we do this before
     # using commit body in as a comment; doing it by stripping right before
@@ -1663,7 +1668,7 @@ def strip_bug_url(bug, commit_body):
 def edit_attachment_comment(bug, initial_description, initial_body):
     template = StringIO()
     template.write("# Attachment to Bug %d - %s\n\n" % (bug.id, bug.short_desc))
-    template.write(initial_description)
+    template.write(strip_bug_prefix(bug, initial_description))
     template.write("\n\n")
     template.write(initial_body)
     template.write("\n\n")
@@ -1757,7 +1762,7 @@ def attach_commits(bug, commits, include_comments=True, edit_comments=False, sta
         if edit_comments:
             description, body, obsoletes, commit_message, review, superreview = edit_attachment_comment(bug, commit_range.subject, body)
         else:
-            description = commit_range.subject
+            description = strip_bug_prefix(bug, commit_range.subject)
             commit_message = commit_range.subject
             obsoletes = []
             review = []
