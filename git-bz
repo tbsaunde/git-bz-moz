@@ -271,7 +271,7 @@ def get_tracker():
     try:
         return git.config('bz.default-tracker', get=True)
     except CalledProcessError:
-        return 'bugzilla.gnome.org'
+        return 'bugzilla.mozilla.org'
 
 def get_default_product():
     try:
