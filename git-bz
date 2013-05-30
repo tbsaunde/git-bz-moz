@@ -1299,7 +1299,7 @@ class Bug(object):
         print "Bug %d - %s" % (self.id, short_desc)
         print self.get_url()
 
-    def create_patch(self, description, comment, filename, data, obsoletes=[], status='none', review=[], superreview=[]):
+    def create_patch(self, description, comment, filename, data, obsoletes=[], status='none', review=[], superreview=[], feedback=[]):
         fields = {}
         fields['bugid'] = str(self.id)
         token = self.get_attachment_token()
@@ -1316,20 +1316,31 @@ class Bug(object):
             # name 'obsolete' for each item in the list
             fields['obsolete'] = map(str, obsoletes)
 
-        # Support for flagging for review/superreview. I have no idea if this works on
-        # installations other than bugzilla.mozilla.org.
+        # Support for flagging for review/superreview/feedback. I have
+        # no idea if this works on installations other than
+        # bugzilla.mozilla.org. These flag numbers are specified at
+        # https://api-dev.bugzilla.mozilla.org/latest/configuration.
+        review_flag = 4
+        superreview_flag = 5
+        feedback_flag = 607
         if review:
             if review[0] == ':me+':
-                fields['flag_type-4'] = '+'
+                fields['flag_type-%d' % review_flag] = '+'
             else:
-                fields['flag_type-4'] = '?'
-                fields['requestee_type-4'] = ",".join(review)
+                fields['flag_type-%d' % review_flag] = '?'
+                fields['requestee_type-%d' % review_flag] = ",".join(review)
         if superreview:
             if superreview[0] == ':me+':
-                fields['flag_type-5'] = '+'
+                fields['flag_type-%d' % superreview_flag] = '+'
             else:
-                fields['flag_type-5'] = '?'
-                fields['requestee_type-5'] = ",".join(superreview)
+                fields['flag_type-%d' % superreview_flag] = '?'
+                fields['requestee_type-%d' % superreview_flag] = ",".join(superreview)
+        if feedback:
+            if feedback[0] == ':me+':
+                fields['flag_type-%d' % feedback_flag] = '+'
+            else:
+                fields['flag_type-%d' % feedback_flag] = '?'
+                fields['requestee_type-%d' % feedback_flag] = ",".join(feedback)
 
         files = { 'data': (filename, 'text/plain; charset=UTF-8', data) }
 
@@ -1687,6 +1698,14 @@ def edit_attachment_comment(bug, initial_description, initial_body):
     except CalledProcessError:
         template.write("#Super-Review: superreviewer@example.com\n")
     template.write("#Super-Review: :me+\n\n")
+
+    try:
+        for feedbacker in git.config('bz.feedbacker', get_all=True).split('\n'):
+            template.write("#Feedback: %s\n" % feedbacker)
+    except CalledProcessError:
+        template.write("#Feedback: feedbacker@example.com\n")
+    template.write("#Feedback: :me+\n\n")
+
     if len(bug.patches) > 0:
         for patch in bug.patches:
             template.write("#Obsoletes: %d - %s\n" % (patch.attach_id, patch.description))
@@ -1700,9 +1719,10 @@ def edit_attachment_comment(bug, initial_description, initial_body):
 
     lines = edit_template(template.getvalue())
 
-    obsoletes= []
-    review= []
-    superreview= []
+    obsoletes = []
+    review = []
+    superreview = []
+    feedback = []
     commit_message = []
 
     def filter_special(line):
@@ -1719,6 +1739,7 @@ def edit_attachment_comment(bug, initial_description, initial_body):
         if append_matching_group("^\s*Obsoletes\s*:\s*([\d]+)", obsoletes, line) or \
            append_matching_group("^\s*Review\s*:\s*(.+)", review, line) or \
            append_matching_group("^\s*Super-Review\s*:\s*(.+)", superreview, line) or \
+           append_matching_group("^\s*Feedback\s*:\s*(.+)", feedback, line) or \
            append_matching_group("^\s*Commit-Message\s*:\s*(.*)", commit_message, line):
              return False
         return True
@@ -1735,7 +1756,7 @@ def edit_attachment_comment(bug, initial_description, initial_body):
     if commit_message:
         commit_message = commit_message[0]
 
-    return description, comment, obsoletes, commit_message, review, superreview
+    return description, comment, obsoletes, commit_message, review, superreview, feedback
 
 def attach_commits(bug, commits, include_comments=True, edit_comments=False, status='none'):
     # We want to attach the patches in chronological order
@@ -1760,13 +1781,14 @@ def attach_commits(bug, commits, include_comments=True, edit_comments=False, sta
         else:
             body = None
         if edit_comments:
-            description, body, obsoletes, commit_message, review, superreview = edit_attachment_comment(bug, commit_range.subject, body)
+            description, body, obsoletes, commit_message, review, superreview, feedback = edit_attachment_comment(bug, commit_range.subject, body)
         else:
             description = strip_bug_prefix(bug, commit_range.subject)
             commit_message = commit_range.subject
             obsoletes = []
             review = []
             superreview = []
+            feedback = []
         # Prepend the body
         if body:
             patch = body + "\n\n" + patch
@@ -1778,7 +1800,7 @@ def attach_commits(bug, commits, include_comments=True, edit_comments=False, sta
         hgstring += "# User " + commit_range.author + '\n\n'
         patch = hgstring + patch
 
-        bug.create_patch(description, body, filename,  patch, obsoletes=obsoletes, status=status, review=review, superreview=superreview)
+        bug.create_patch(description, body, filename,  patch, obsoletes=obsoletes, status=status, review=review, superreview=superreview, feedback=feedback)
 
 def do_attach(*args):
     if len(args) == 1:
