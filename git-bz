@@ -2236,7 +2236,8 @@ def do_file(*args):
     if global_options.add_url:
         add_url(bug, commits)
 
-    attach_commits(bug, commits, include_comments=include_comments)
+    attach_commits(bug, commits, include_comments=include_comments,
+                   edit_comments=global_options.edit)
 
 def run_push(*args, **kwargs):
     # Predicting what 'git pushes' pushes based on the command line
@@ -2388,6 +2389,7 @@ elif command == 'edit':
 elif command == 'file':
     parser.set_usage("git bz file [options] [[<product>]]/<component>] (<commit> | <revision range>)");
     add_add_url_options()
+    add_edit_option()
     min_args = 1
     max_args = 2
 elif command == 'push':
