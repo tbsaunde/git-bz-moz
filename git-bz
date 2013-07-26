@@ -822,18 +822,23 @@ def edit_template(template):
 
     return lines
 
-def split_subject_body(lines):
-    # Splits the first line (subject) from the subsequent lines (body)
+def strip_lines(lines):
+    # Strips leading and trailing lines of whitespace
 
-    i = 0
-    subject = ""
-    while i < len(lines):
-        subject = lines[i].strip()
-        if subject != "":
+    first_line = 0
+    last_line = len(lines) - 1
+
+    while first_line <= last_line:
+        if len(lines[first_line].strip()):
             break
-        i += 1
+        first_line += 1
 
-    return subject, "".join(lines[i + 1:]).strip()
+    while last_line >= first_line:
+        if len(lines[last_line].strip()):
+            break
+        last_line -= 1
+
+    return lines[first_line:last_line + 1]
 
 def _shortest_unique_abbreviation(full, l):
     for i in xrange(1, len(full) + 1):
@@ -1676,14 +1681,20 @@ def strip_bug_url(bug, commit_body):
     pattern = "\s*" + re.escape(bug.get_url()) + "\s*$"
     return re.sub(pattern, "", commit_body)
 
-def edit_attachment_comment(bug, initial_description, initial_body):
+def edit_attachment_comment(bug, initial_description, initial_body, initial_comment):
     template = StringIO()
     template.write("# Attachment to Bug %d - %s\n\n" % (bug.id, bug.short_desc))
+    template.write("# Please edit the attachment description (first line) and comment (other lines).\n")
+    template.write("# Lines starting with '#' will be ignored.  Delete everything to abort.\n\n")
     template.write(strip_bug_prefix(bug, initial_description))
     template.write("\n\n")
+    template.write(initial_comment)
+    template.write("\n\n")
+    template.write("# Lines following 'Commit-Message:' will be included as the extended commit message\n")
+    template.write("# in the attached patch. Comment this out to re-use the attachment name/description.\n\n")
+    template.write("Commit-Message: %s\n\n" % initial_description)
     template.write(initial_body)
     template.write("\n\n")
-    template.write("Commit-Message: %s\n\n" % initial_description)
     try:
         for reviewer in git.config('bz.reviewer', get_all=True).split('\n'):
             template.write("#Review: %s\n" % reviewer)
@@ -1711,11 +1722,9 @@ def edit_attachment_comment(bug, initial_description, initial_body):
             template.write("#Obsoletes: %d - %s\n" % (patch.attach_id, patch.description))
         template.write("\n")
 
-    template.write("""# Please edit the description (first line) and comment (other lines). Lines
-# starting with '#' will be ignored.  Delete everything to abort.
-""")
     if len(bug.patches) > 0:
         template.write("# To obsolete existing patches, uncomment the appropriate lines.\n")
+
 
     lines = edit_template(template.getvalue())
 
@@ -1723,42 +1732,60 @@ def edit_attachment_comment(bug, initial_description, initial_body):
     review = []
     superreview = []
     feedback = []
-    commit_message = []
 
-    def filter_special(line):
-        def append_matching_group(regexp, list, line):
-            match = re.match(regexp, line)
+    commit_message = []
+    comment_lines = []
+
+    for line in lines:
+        # Capture a |Metadata:| formatted line and stuff it into the relevant
+        # list
+        def append_matching_group(key, list, line, content_regexp='.+'):
+            match = re.match("^\s*%s\s*:\s*(%s)" % (key, content_regexp), line)
             if match:
                 list.append(match.group(1).strip())
                 return True
             return False
 
-        # Capture the 'obsoletes', 'review', 'super-review', or
-        # 'commit-message' info in this line and shove it into the relevant
-        # list.
-        if append_matching_group("^\s*Obsoletes\s*:\s*([\d]+)", obsoletes, line) or \
-           append_matching_group("^\s*Review\s*:\s*(.+)", review, line) or \
-           append_matching_group("^\s*Super-Review\s*:\s*(.+)", superreview, line) or \
-           append_matching_group("^\s*Feedback\s*:\s*(.+)", feedback, line) or \
-           append_matching_group("^\s*Commit-Message\s*:\s*(.*)", commit_message, line):
-             return False
-        return True
+        if append_matching_group("Obsoletes", obsoletes, line, content_regexp="[\d]+") or \
+           append_matching_group("Review", review, line) or \
+           append_matching_group("Super-Review", superreview, line) or \
+           append_matching_group("Feedback", feedback, line) or \
+           append_matching_group("Commit-Message", commit_message, line):
+            continue
 
-    lines = filter(filter_special, lines)
+        # The Commit-Message: line delineates the break between the attachment
+        # description and the commit message and body
+        if len(commit_message):
+            commit_message.append(line)
+        else:
+            comment_lines.append(line)
+
     obsoletes = map(int, obsoletes)
 
-    description, comment = split_subject_body(lines)
-
-    if description == "":
+    comment_lines = strip_lines(comment_lines)
+    if not len(comment_lines):
         die("Empty description, aborting")
 
-    # Work around inner-method variable access weirdness
+    description = comment_lines[0]
+    comment = "".join(comment_lines[1:]).strip()
+
+    # Don't strip_lines(commit_message) because its first member is the
+    # Commit-Message: line, empty or no
     if commit_message:
-        commit_message = commit_message[0]
+        if not len(commit_message[0].strip()):
+            die("Empty commit message, aborting")
+        commit_body = "".join(commit_message[1:]).strip()
+        commit_message = commit_message[0].strip()
+    else:
+        # If Commit-Message is commented out entirely, just reuse the attachment
+        # desc/comment
+        commit_message = description
+        commit_body = comment
 
-    return description, comment, obsoletes, commit_message, review, superreview, feedback
+    return description, comment, commit_message, commit_body, obsoletes, \
+           review, superreview, feedback
 
-def attach_commits(bug, commits, include_comments=True, edit_comments=False, status='none'):
+def attach_commits(bug, commits, fill_comment=True, edit=False, status='none'):
     # We want to attach the patches in chronological order
     commits = list(commits)
     commits.reverse()
@@ -1776,12 +1803,15 @@ def attach_commits(bug, commits, include_comments=True, edit_comments=False, sta
     for commit_range in commit_ranges:
         filename = make_filename(commit_range.subject) + ".patch"
         patch = get_patch(commit_range)
-        if include_comments:
-            body = strip_bug_url(bug, get_body(commit_range))
+        commit_body = get_body(commit_range)
+        if fill_comment:
+            comment = strip_bug_url(bug, commit_body)
         else:
-            body = None
-        if edit_comments:
-            description, body, obsoletes, commit_message, review, superreview, feedback = edit_attachment_comment(bug, commit_range.subject, body)
+            comment = None
+        if edit:
+            description, comment, commit_message, commit_body, obsoletes, \
+                review, superreview, feedback = \
+                    edit_attachment_comment(bug, commit_range.subject, commit_body, comment)
         else:
             description = strip_bug_prefix(bug, commit_range.subject)
             commit_message = commit_range.subject
@@ -1790,8 +1820,8 @@ def attach_commits(bug, commits, include_comments=True, edit_comments=False, sta
             superreview = []
             feedback = []
         # Prepend the body
-        if body:
-            patch = body + "\n\n" + patch
+        if commit_body:
+            patch = commit_body + "\n\n" + patch
         # Prepend the commit message
         if commit_message:
             patch = commit_message + "\n\n" + patch
@@ -1800,7 +1830,7 @@ def attach_commits(bug, commits, include_comments=True, edit_comments=False, sta
         hgstring += "# User " + commit_range.author + '\n\n'
         patch = hgstring + patch
 
-        bug.create_patch(description, body, filename,  patch, obsoletes=obsoletes, status=status, review=review, superreview=superreview, feedback=feedback)
+        bug.create_patch(description, comment, filename, patch, obsoletes=obsoletes, status=status, review=review, superreview=superreview, feedback=feedback)
 
 def do_attach(*args):
     if len(args) == 1:
@@ -1850,7 +1880,7 @@ def do_attach(*args):
     if global_options.add_url:
         add_url(bug, commits)
 
-    attach_commits(bug, commits, edit_comments=global_options.edit)
+    attach_commits(bug, commits, edit=global_options.edit)
 
 # Sort the patches in the bug into categories based on a set of Git
 # git commits that we're considering to be newly applied. Matching
@@ -2215,29 +2245,30 @@ def do_file(*args):
     for commit in reversed(commits):
         template.write("#   " + commit.id[0:7] + " " + commit.subject + "\n")
 
-    lines = edit_template(template.getvalue())
+    lines = strip_lines(edit_template(template.getvalue()))
 
-    summary, description = split_subject_body(lines)
-
-    if summary == "":
+    if not len(lines):
         die("Empty summary, aborting")
+
+    summary = lines[0]
+    description = "".join(lines[1:]).strip()
 
     # If we have only one patch and no other description for the bug was
     # specified, use the body of the commit as the the description for
-    # the bug rather than the descriptionfor the attachment
-    include_comments=True
-    if len(commits) == 1:
-        if description == "":
-            description = get_body(commits[0])
-            include_comments = False
+    # the bug rather than the description for the attachment
+    if len(commits) == 1 and description == "":
+        description = get_body(commits[0])
+        fill_comment = False
+    else:
+        fill_comment = True
 
     bug = Bug.create(get_tracker(), product, component, summary, description)
 
     if global_options.add_url:
         add_url(bug, commits)
 
-    attach_commits(bug, commits, include_comments=include_comments,
-                   edit_comments=global_options.edit)
+    attach_commits(bug, commits, fill_comment=fill_comment,
+                   edit=global_options.edit)
 
 def run_push(*args, **kwargs):
     # Predicting what 'git pushes' pushes based on the command line
