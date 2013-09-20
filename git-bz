@@ -1207,6 +1207,10 @@ class Bug(object):
                 patch.isprivate = attachment.get("isprivate") == "1"
                 token = attachment.find("token")
                 patch.token = None if token is None else token.text
+                flags = attachment.findall("flag")
+                patch.flag_requestees = set()
+                for flag in flags:
+                    patch.flag_requestees.add(flag.get("requestee"))
 
                 if attachmentdata:
                     data = attachment.find("data").text
@@ -1643,6 +1647,12 @@ def do_apply(bug_reference):
         if patch.status == 'committed' or patch.status == 'rejected':
             print "Skipping, %s: %s" % (patch.status, patch.description)
             continue
+
+        if global_options.requestee:
+            if global_options.requestee not in patch.flag_requestees:
+                print "Skipping patch for %s: %s" % (patch.flag_requestees,
+                                                     patch.description)
+                continue
 
         print patch.description
         if not prompt("Apply?"):
@@ -2393,12 +2403,17 @@ def add_fix_option():
     parser.add_option("", "--fix", metavar="<bug reference>",
                       help="attach commits and close bug")
 
+def add_requestee_option():
+    parser.add_option("-r", "--requestee", action="store", dest="requestee",
+                      help="Only apply commits assigned to this requestee")
+
 if command == 'add-url':
     parser.set_usage("git bz add-url [options] <bug reference> (<commit> | <revision range>)");
     min_args = max_args = 2
 elif command == 'apply':
     parser.set_usage("git bz apply [options] <bug reference>");
     add_add_url_options()
+    add_requestee_option()
     min_args = max_args = 1
 elif command == 'attach':
     parser.set_usage("git bz attach [options] [<bug reference>] (<commit> | <revision range>)");
