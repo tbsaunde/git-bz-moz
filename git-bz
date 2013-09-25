@@ -1633,6 +1633,24 @@ def do_add_url(bug_reference, commit_or_revision_range):
     print
     add_url(bug, commits)
 
+def requestee_match(requestees):
+    # No --requestee flag means we take all patches
+    if not global_options.requestee:
+        return True
+
+    # If we specify an exact match, see if we're in the requestees
+    if global_options.requestee in requestees:
+        return True
+
+    # If we specify a partial (user-name) match, see if we match the
+    # user-name of any requestee. Eg: a requestee of 'foo' will match
+    # foo@example.com, but not foobar@example.com
+    if '@' not in global_options.requestee:
+        for requestee in requestees:
+            if requestee.startswith(global_options.requestee + '@'):
+                return True
+    return False
+
 def do_apply(bug_reference):
     bug = Bug.load(BugHandle.parse_or_die(bug_reference),
                    attachmentdata=True)
@@ -1645,11 +1663,10 @@ def do_apply(bug_reference):
             print "Skipping, %s: %s" % (patch.status, patch.description)
             continue
 
-        if global_options.requestee:
-            if global_options.requestee not in patch.flag_requestees:
-                print "Skipping patch for %s: %s" % (patch.flag_requestees,
-                                                     patch.description)
-                continue
+        if not requestee_match(patch.flag_requestees):
+            print "Skipping patch for %s: %s" % (patch.flag_requestees,
+                                                 patch.description)
+            continue
 
         print patch.description
         if not prompt("Apply?"):
