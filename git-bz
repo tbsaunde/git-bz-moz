@@ -1207,10 +1207,7 @@ class Bug(object):
                 patch.isprivate = attachment.get("isprivate") == "1"
                 token = attachment.find("token")
                 patch.token = None if token is None else token.text
-                flags = attachment.findall("flag")
-                patch.flag_requestees = set()
-                for flag in flags:
-                    patch.flag_requestees.add(flag.get("requestee"))
+                patch.flag_requestees = set(flag.get("requestee") for flag in attachment.findall("flag"))
 
                 if attachmentdata:
                     data = attachment.find("data").text
