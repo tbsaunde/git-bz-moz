@@ -263,13 +263,22 @@ AUTHENTICATION
 --------------
 In order to use git-bz you need to already be logged into the bug tracker
 in your web browser, and git-bz reads your browser cookie. Currently only
-Firefox 3, Epiphany and Galeon are supported, and only on Linux. Patches to
-add more support and to allow configuring username/password directly
-per bug tracker accepted.
+Firefox 3, Epiphany and Galeon are supported, and only on Linux.
 
 By default, when using Firefox profiles, git-bz will use your the default
 profile specified in profiles.ini. You may override this using the config
 variable +bz.firefox-profile+.
+
+If you don't run a browser on the machine where you use git-bz, you can set
++bz.browser+ to +manual+, and add per-tracker configuration with cookies
+extracted from your Firefox configuration.  Note that you'll need to change
+these when/if the cookies become invalid.  For example:
+
+----------------------------------------
+git config bz.browser manual
+git config bz.bugzilla.gnome.org.bugzilla-login 9999
+git config bz.bugzilla.gnome.org.bugzilla-logincookie ABCD1234ABCD1234
+----------------------------------------
 
 BUG REFERENCES
 --------------

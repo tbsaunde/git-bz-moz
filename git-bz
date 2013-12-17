@@ -686,11 +686,23 @@ def get_bugzilla_cookies_google_chrome(host):
                                     "Google Chrome",
                                     '~/.config/google-chrome/Default')
 
+def get_bugzilla_cookies_manual(host):
+    tracker = get_tracker()
+    config = get_config(tracker)
+    for p in 'bugzilla-login', 'bugzilla-logincookie':
+        if p not in config:
+            raise CookieError("config `bz-tracker.%s.%s` not found" % (tracker, p))
+    return {
+        'Bugzilla_login': config['bugzilla-login'],
+        'Bugzilla_logincookie': config['bugzilla-logincookie'],
+    }
+
 browsers = { 'firefox3'     : get_bugzilla_cookies_ff3,
              'epiphany'     : get_bugzilla_cookies_epy,
              'galeon'       : get_bugzilla_cookies_galeon,
              'chromium'     : get_bugzilla_cookies_chromium,
-             'google-chrome': get_bugzilla_cookies_google_chrome }
+             'google-chrome': get_bugzilla_cookies_google_chrome,
+             'manual'       : get_bugzilla_cookies_manual }
 
 def browser_list():
     return ", ".join(sorted(browsers.keys()))
