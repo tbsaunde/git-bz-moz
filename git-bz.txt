@@ -320,6 +320,23 @@ If you want to disable adding URLs by default, you can use the +bz.add-url+
 config variable, which defaults to false. The -u/--add-url and -n/--no-add-url
 command line options override the config variable.
 
+FLAGS
+-----
+You can set flags on attachments by editing the submission (+-e+).  The
+template automatically supplies some suggested reviewers, etc., but you can
+add your own in the git config:
+
+----------------------------------------
+git config bz.reviewer jimmy@company.com
+git config bz.reviewer sally@company.com
+git config bz.superreviewer sally@company.com
+git config bz.feedbacker joe@company.com
+----------------------------------------
+
+NOTE: these flags only work on bugzilla.mozilla.org at the moment, as they
+must be specified numerically.  (patches to improve this situation are welcome
+--@djmitche)
+
 ALIASES
 -------
 You can create short aliases for different bug trackers as follows
