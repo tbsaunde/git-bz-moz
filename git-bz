@@ -78,12 +78,10 @@ import shutil
 import sys
 import tempfile
 import time
-import traceback
 import xmlrpclib
 import urllib
 import urlparse
 from xml.etree.cElementTree import ElementTree
-import base64
 import platform
 
 # Globals
