@@ -386,13 +386,13 @@ def tracker_get_path(tracker):
 
 def tracker_get_auth_user(tracker):
     config = get_config(tracker)
-    if 'path' in config:
+    if 'auth-user' in config:
         return config['auth-user']
     return None
 
 def tracker_get_auth_password(tracker):
     config = get_config(tracker)
-    if 'path' in config:
+    if 'auth-password' in config:
         return config['auth-password']
     return None
 
@@ -436,9 +436,10 @@ class BugHandle:
             self.path = '/' + self.path
 
     def get_url(self):
-        return "%s://%s/show_bug.cgi?id=%s" % ("https" if self.https else "http",
-                                               self.host,
-                                               self.id)
+        return "%s://%s%s/show_bug.cgi?id=%s" % ("https" if self.https else "http",
+                                                 self.host,
+                                                 self.path,
+                                                 self.id)
 
     def needs_auth(self):
         return self.auth_user and self.auth_password
