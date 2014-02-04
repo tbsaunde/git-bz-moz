@@ -125,6 +125,8 @@ def git_run(command, *args, **kwargs):
                 to_run.append("-" + k)
             else:
                 to_run.append("--" + k.replace("_", "-"))
+        elif v is False:
+            continue
         else:
             to_run.append("--" + k.replace("_", "-") + "=" + v)
 
@@ -237,6 +239,7 @@ def get_patch(commit_or_range):
     # improves readability.
 
     return git.diff(commit_or_range.commit_range(),
+                    ignore_all_space=global_options.ignore_all_space,
                     M=True, binary=True, unified="8", patience=True) + "\n"
 
 def get_body(commit_or_range):
@@ -2432,6 +2435,10 @@ def add_requestee_option():
     parser.add_option("-r", "--requestee", action="store", dest="requestee",
                       help="Only apply commits assigned to this requestee")
 
+def add_whitespace_option():
+    parser.add_option("-w", "--ignore-all-space", action="store_true", default=False,
+                      help="pass -w option when generating a patch")
+
 if command == 'add-url':
     parser.set_usage("git bz add-url [options] <bug reference> (<commit> | <revision range>)");
     min_args = max_args = 2
@@ -2444,6 +2451,7 @@ elif command == 'attach':
     parser.set_usage("git bz attach [options] [<bug reference>] (<commit> | <revision range>)");
     add_add_url_options()
     add_edit_option()
+    add_whitespace_option()
     min_args = 1
     max_args = 2
 elif command == 'components':
