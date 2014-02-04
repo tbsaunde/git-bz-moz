@@ -10,7 +10,7 @@ SYNOPSIS
 [verse]
 'git bz add-url' <bug reference> (<commit> | <revision range>)
 'git bz apply' [-n | --no-add-url] <bug reference>
-'git bz attach' [-n | --no-add-url] [-e |--edit] [<bug reference>] (<commit> | <revision range>)
+'git bz attach' [-n | --no-add-url] [-e |--edit] [-w | --ignore-all-space] [<bug reference>] (<commit> | <revision range>)
 'git bz components' [<product>]
 'git bz edit' (<bug reference> | <commit> | <revision range>)
 'git bz edit' (--pushed | --fix <bug reference) (<commit> | <revision range>)
@@ -171,6 +171,10 @@ to the bug (see 'git bz add-url'). This can be suppressed with the
 --edit;;
 	allow the user to edit the description and comment for each patch,
 	and (by uncommenting lines) obsolete old patches.
+
+-w;;
+--ignore-all-space;;
+	ignore whitespace when generating the patch to attach.
 
 Examples:
 ----------------------------------------
