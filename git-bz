@@ -1904,16 +1904,32 @@ def do_attach(*args):
     # For the common case of one attachment don't prompt if we are going
     # to give them a chance to edit and abort anyways.
     if len(commits) > 1 or not global_options.edit:
-        print "Bug %d - %s" % (bug.id, bug.short_desc)
-        print
+        template = StringIO()
+        template.write("""# Bug %(id)d - %(short_desc)s
+#
+# Lines starting with '#' will be ignored.  Delete everything to abort.
+#
+# Commits to be attached:
 
+""" % { 'id': bug.id, 'short_desc': bug.short_desc })
+
+        commit_lines = []
         for commit in reversed(commits):
-            print commit.id[0:7], commit.subject
+            commit_line = commit.id[0:7] + " " + commit.subject + "\n"
+            commit_lines.append(commit_line)
+            template.write(commit_line)
 
-        print
-        if not prompt("Attach?"):
-            print "Aborting"
-            sys.exit(0)
+        lines = edit_template(template.getvalue()) # lines are not stripped.
+
+        to_attach = []
+        for commit_line, commit in zip(reversed(commit_lines), commits):
+            if commit_line in lines:
+                to_attach.append(commit)
+
+        if not to_attach:
+            die("No commits to attach, aborting")
+
+        commits = to_attach
 
     if global_options.add_url:
         add_url(bug, commits)
