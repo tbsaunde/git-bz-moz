@@ -1708,7 +1708,7 @@ def do_apply(bug_reference):
 
 def strip_bug_prefix(bug, description):
     # Strip any Bug XXXXXX prefix in a short description
-    pattern = r"^\s*[Bb](ug)?\s*=?\s*%s\s*[\-:]?\s*" % (bug.id)
+    pattern = r"^\s*[Bb](ug)?\s*=?\s*%s\s*[\-:,]?\s*" % (bug.id)
     return re.sub(pattern, "", description)
 
 def strip_bug_url(bug, commit_body):
