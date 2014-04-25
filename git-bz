@@ -83,6 +83,7 @@ import urllib
 import urlparse
 from xml.etree.cElementTree import ElementTree
 import platform
+from splitreviewer import split_reviewer
 
 # Globals
 # =======
@@ -1720,11 +1721,13 @@ def strip_bug_url(bug, commit_body):
     return re.sub(pattern, "", commit_body)
 
 def edit_attachment_comment(bug, initial_description, initial_body, initial_comment):
+    [no_reviewer_description, reviewers] = split_reviewer(initial_description)
+
     template = StringIO()
     template.write("# Attachment to Bug %d - %s\n\n" % (bug.id, bug.short_desc))
     template.write("# Please edit the attachment description (first line) and comment (other lines).\n")
     template.write("# Lines starting with '#' will be ignored.  Delete everything to abort.\n\n")
-    template.write(strip_bug_prefix(bug, initial_description))
+    template.write(strip_bug_prefix(bug, no_reviewer_description))
     template.write("\n\n")
     template.write(initial_comment)
     template.write("\n\n")
@@ -1733,6 +1736,8 @@ def edit_attachment_comment(bug, initial_description, initial_body, initial_comm
     template.write("Commit-Message: %s\n\n" % initial_description)
     template.write(initial_body)
     template.write("\n\n")
+    for r in reviewers:
+        template.write("#Review: :" + r + "\n")
     try:
         for reviewer in git.config('bz.reviewer', get_all=True).split('\n'):
             template.write("#Review: %s\n" % reviewer)
