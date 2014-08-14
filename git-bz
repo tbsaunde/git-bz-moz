@@ -179,7 +179,7 @@ class GitCommitRange:
     end id.  This class is used when folding patches.  The folded patches take
     the initial commit's subject and author, but their combined diff is over
     the range start^..end.
-    
+
     """
     def __init__(self, commit):
         self.start = commit.id
@@ -1379,7 +1379,11 @@ class Bug(object):
                                  r"<title>\s*Changes\s+Submitted",
                                  # Newer bugzilla's, use, instead:
                                  r"<title>\s*Attachment\s+\d+\s+added"):
-            print response_data
+            response_match = re.search("<title>([^<]+)</title>", response_data)
+            if response_match:
+                print 'Error response from bugzilla:', response_match.group(1)
+            else:
+                print 'Error response from bugzilla.'
             die ("Failed to attach patch to bug %d, status=%d" % (self.id, response.status))
 
         print "Attached %s" % filename
