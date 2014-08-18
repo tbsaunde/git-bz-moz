@@ -2249,12 +2249,14 @@ def do_file(*args):
     config = get_config(get_tracker())
 
     if product_component:
-        m = re.match("(?:([^/]+)/)?([^/]+)", product_component)
-        if not m:
-            die("'%s' is not a valid [<product>/]<component>" % product_component)
+        (product, component) = product_component.split("/", 1)
 
-        product = m.group(1)
-        component = m.group(2)
+        if component is None:
+            product = None
+            component = product_component
+
+        if not component:
+            die("'%s' is not a valid [<product>/]<component>" % product_component)
 
         if not product:
             product = get_default_product()
