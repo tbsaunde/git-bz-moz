@@ -1040,8 +1040,8 @@ class BugServer(object):
 
     def get_xmlrpc_proxy(self):
         if self._xmlrpc_proxy is None:
-            uri = "%s://%s/xmlrpc.cgi" % ("https" if self.https else "http",
-                                          self.host)
+            uri = "%s://%s%s/xmlrpc.cgi" % ("https" if self.https else "http",
+                                          self.host, self.path)
             if self.https:
                 transport = SafeBugTransport(self)
             else:
