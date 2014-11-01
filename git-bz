@@ -835,6 +835,8 @@ def edit_template(template):
     lines = filter(lambda x: not x.startswith("#"), f.readlines())
     f.close()
 
+    os.remove(filename)
+
     return lines
 
 def strip_lines(lines):
