@@ -384,7 +384,7 @@ def tracker_get_path(tracker):
     config = get_config(tracker)
     if 'path' in config:
         return config['path']
-    return None
+    return ""
 
 def tracker_get_auth_user(tracker):
     config = get_config(tracker)
