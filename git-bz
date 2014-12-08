@@ -2515,6 +2515,7 @@ elif command == 'file':
     parser.set_usage("git bz file [options] [[<product>]]/<component>] (<commit> | <revision range>)");
     add_add_url_options()
     add_edit_option()
+    add_whitespace_option()
     min_args = 1
     max_args = 2
 elif command == 'push':
