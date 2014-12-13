@@ -1898,7 +1898,7 @@ def attach_commits(bug, commits, fill_comment=True, edit=False, status='none'):
 
         bug.create_patch(description, comment, filename, patch, obsoletes=obsoletes, status=status, review=review, superreview=superreview, feedback=feedback, ui_review=ui_review)
 
-def do_attach(*args):
+def _get_commits_and_handle(args):
     if len(args) == 1:
         commit_or_revision_range = args[0]
         commits = get_commits(commit_or_revision_range)
@@ -1922,11 +1922,19 @@ def do_attach(*args):
 
         commits = get_commits(commit_or_revision_range)
         handle = BugHandle.parse_or_die(bug_reference)
+    return [commits, handle]
+
+def do_attach(*args):
+    commits, handle = _get_commits_and_handle(args)
 
     bug = Bug.load(handle)
 
     if global_options.add_url:
         check_add_url(commits, bug.id, is_add_url=False)
+        add_url(bug, commits)
+        # Try to get the commits again, in case the user has used symbolic refs,
+        # to ensure that we pick the commits after the rebase.
+        commits, handle = _get_commits_and_handle(args)
 
     # We always want to prompt if the user has specified multiple attachments.
     # For the common case of one attachment don't prompt if we are going
@@ -1958,9 +1966,6 @@ def do_attach(*args):
             die("No commits to attach, aborting")
 
         commits = to_attach
-
-    if global_options.add_url:
-        add_url(bug, commits)
 
     attach_commits(bug, commits, edit=global_options.edit)
 
@@ -2350,6 +2355,9 @@ def do_file(*args):
 
     if global_options.add_url:
         add_url(bug, commits)
+        # Try to get the commits again, in case the user has used symbolic refs,
+        # to ensure that we pick the commits after the rebase.
+        commits = get_commits(commit_or_revision_range)
 
     attach_commits(bug, commits, fill_comment=fill_comment,
                    edit=global_options.edit)
