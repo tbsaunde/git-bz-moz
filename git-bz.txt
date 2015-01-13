@@ -333,6 +333,14 @@ If you want to disable adding URLs by default, you can use the +bz.add-url+
 config variable, which defaults to false. The -u/--add-url and -n/--no-add-url
 command line options override the config variable.
 
+[[add-url-ignore-remote-commits]]
+ADD URL IGNORE REMOTE COMMITS
+-----------------------------
+By default, when adding a URL to your commits, git-bz checks to make sure
+that the commits in question are not published to a remote.  This can be
+very slow, and you can disable this check if you don't need it by setting
+the git config variable +bz.add-url-ignore-remote-commits+ to true.
+
 FLAGS
 -----
 You can set flags on attachments by editing the submission (+-e+).  The

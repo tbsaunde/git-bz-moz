@@ -299,6 +299,12 @@ def get_add_url_method():
     except CalledProcessError:
         return "body-append:%u"
 
+def get_add_url_ignore_remote_commits():
+    try:
+        return git.config('bz.add-url-ignore-remote-commits', get=True) == 'true'
+    except CalledProcessError:
+        return False
+
 def get_firefox_profile_pref():
     try:
         return git.config('bz.firefox-profile', get=True)
@@ -1501,17 +1507,18 @@ def check_add_url(commits, bug_id=None, is_add_url=False):
         if base != commit.id:
             die("%s %s\nNot an ancestor of HEAD, can't add bug URL to it" % (commit.id[0:7], commit.subject))
 
-        # see if the commit is present in any remote branches
-        remote_branches = git.branch(contains=commit.id, r=True)
-        if remote_branches != "":
-            print commit.id[0:7], commit.subject
-            print "Commit is already in remote branch(es):", " ".join(remote_branches.split())
-            if not prompt("Rewrite the commit add the bug URL anyways?"):
-                if is_add_url:
-                    print "Aborting."
-                else:
-                    print "Aborting. You can use -n/--no-add-url to turn off adding the URL"
-                sys.exit(0)
+        if not get_add_url_ignore_remote_commits():
+            # see if the commit is present in any remote branches
+            remote_branches = git.branch(contains=commit.id, r=True)
+            if remote_branches != "":
+                print commit.id[0:7], commit.subject
+                print "Commit is already in remote branch(es):", " ".join(remote_branches.split())
+                if not prompt("Rewrite the commit add the bug URL anyways?"):
+                    if is_add_url:
+                        print "Aborting."
+                    else:
+                        print "Aborting. You can use -n/--no-add-url to turn off adding the URL"
+                    sys.exit(0)
 
     # Check for merge commits
     oldest_commit = commits[-1]
