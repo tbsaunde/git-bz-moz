@@ -2328,7 +2328,8 @@ def do_file(*args):
 
     template = StringIO()
     if len(commits) == 1:
-        template.write(commits[0].subject)
+        [no_reviewer_subject, _] = split_reviewer(commits[0].subject)
+        template.write(no_reviewer_subject)
         template.write("\n")
     template.write("""
 # Please enter the summary (first line) and description (other lines). Lines
