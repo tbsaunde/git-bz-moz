@@ -2328,7 +2328,8 @@ def do_file(*args):
 
     template = StringIO()
     if len(commits) == 1:
-        template.write(commits[0].subject)
+        [no_reviewer_subject, _] = split_reviewer(commits[0].subject)
+        template.write(no_reviewer_subject)
         template.write("\n")
     template.write("""
 # Please enter the summary (first line) and description (other lines). Lines
@@ -2349,9 +2350,9 @@ def do_file(*args):
     summary = lines[0]
     description = "".join(lines[1:]).strip()
 
-    # If we have only one patch and no other description for the bug was
-    # specified, use the body of the commit as the the description for
-    # the bug rather than the description for the attachment
+    # If we have only one patch, and no other description for the bug was
+    # specified, use the body of the commit as the description for the
+    # bug rather than the description for the attachment.
     if len(commits) == 1 and description == "":
         description = get_body(commits[0])
         fill_comment = False
