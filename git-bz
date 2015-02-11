@@ -2307,7 +2307,7 @@ def do_file(*args):
 
     commits = get_commits(commit_or_revision_range)
 
-    bug_references = [c for c in extract_and_collate_bugs(commits)]
+    bug_references = list(extract_and_collate_bugs(commits))
     if len(bug_references) > 0:
         print ("Found existing bug reference%s in commit message%s:" %
                ("" if len(bug_references) == 1 else "s",
