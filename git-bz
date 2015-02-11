@@ -2224,18 +2224,13 @@ def extract_bugs_from_commit(commit):
 # referenced in the list of commits. The order of bugs is the same as the
 # order of their first reference in the list of commits
 def extract_and_collate_bugs(commits):
-    bugs = []
-    bug_to_commits = {}
+    bugs_to_commits = {}
 
     for commit in commits:
         for handle in extract_bugs_from_commit(commit):
-            if not handle in bug_to_commits:
-                bugs.append(handle)
-                bug_to_commits[handle] = []
-            bug_to_commits[handle].append(commit)
+            bugs_to_commits.setdefault(handle, []).append(commit)
 
-    for bug in bugs:
-        yield bug, bug_to_commits[bug]
+    return bugs_to_commits.iteritems()
 
 def do_edit(bug_reference_or_revision_range):
     try:
