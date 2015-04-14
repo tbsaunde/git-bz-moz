@@ -1191,7 +1191,7 @@ class Bug(object):
         self.patches = []
 
     def _load(self, id, attachmentdata=False):
-        url = "/show_bug.cgi?id=" + id + "&ctype=xml"
+        url = "/show_bug.cgi?id=" + id + "&ctype=xml&format=default"
         if not attachmentdata:
             url += "&excludefield=attachmentdata"
 
