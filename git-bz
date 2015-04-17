@@ -1124,6 +1124,32 @@ class BugServer(object):
             cache.set(self.host, 'legal_' + field, values)
             return values
 
+    def get_users(self, keys):
+        users = []
+        for key in keys:
+            result = self.get_xmlrpc_proxy().User.get({ 'match': key })
+            if not result['users'] or len(result['users']) == 0:
+                die("%s doesn't match any bugzilla users" % key)
+            elif len(result['users']) == 1:
+                users += [ result['users'][0]['email'] ]
+            else:
+                print 'possible users are'
+                i = 0
+                for user in result['users']:
+                    print "%d %s %s" % (i, user['real_name'], user['email'])
+                    i = i + 1
+
+                print "please pick a user from the above list"
+                user = None
+                while not user:
+                    answer = int(sys.stdin.readline().strip())
+                    if 0 <= answer and answer <= i:
+                        user = result['users'][answer]['email']
+                
+                users += [ user ]
+
+        return users
+
 # mixin for xmlrpclib.Transport classes to add cookies
 class CookieTransportMixin(object):
     def send_request(self, connection, *args):
@@ -1358,25 +1384,27 @@ class Bug(object):
                 fields['flag_type-%d' % review_flag] = '+'
             else:
                 fields['flag_type-%d' % review_flag] = '?'
-                fields['requestee_type-%d' % review_flag] = ",".join(review)
+                fields['requestee_type-%d' % review_flag] = self.server.get_users(review)
         if superreview:
             if superreview[0] == ':me+':
                 fields['flag_type-%d' % superreview_flag] = '+'
             else:
                 fields['flag_type-%d' % superreview_flag] = '?'
-                fields['requestee_type-%d' % superreview_flag] = ",".join(superreview)
+                fields['requestee_type-%d' % superreview_flag] = \
+                    self.server.get_users(superreview)
         if feedback:
             if feedback[0] == ':me+':
                 fields['flag_type-%d' % feedback_flag] = '+'
             else:
                 fields['flag_type-%d' % feedback_flag] = '?'
-                fields['requestee_type-%d' % feedback_flag] = ",".join(feedback)
+                fields['requestee_type-%d' % feedback_flag] = \
+                    self.server.get_users(feedback)
         if ui_review:
             if ui_review[0] == ':me+':
                 fields['flag_type-%d' % ui_review_flag] = '+'
             else:
                 fields['flag_type-%d' % ui_review_flag] = '?'
-                fields['requestee_type-%d' % ui_review_flag] = ",".join(ui_review)
+                fields['requestee_type-%d' % ui_review_flag] = self.server.get_users(ui_review)
 
         files = { 'data': (filename, 'text/plain; charset=UTF-8', data) }
 
